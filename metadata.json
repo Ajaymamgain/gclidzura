@@ -1,0 +1,6 @@
+{
+  "name": "Zura Conversions",
+  "description": "Guided Google Ads offline conversion pipeline, WhatsApp lead-to-sale attribution workbench, interactive 3D spatial topology, and scoped Gemini diagnostics assistant.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
