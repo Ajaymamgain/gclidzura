@@ -121,7 +121,7 @@ const FLOW_NODES: FlowNodeDef[] = [
     subtitle: 'Meeting Booked / Held',
     tone: 'teal',
     description:
-      'Because final sales take 2–5 months (past Google’s expiry windows), Sales logs a short-term SQL milestone (like Discovery Meeting Held) in Days 6–14 with an expected proxy SGD value.',
+      'Because final sales take 2–5 months (past Google’s expiry windows), Sales logs a short-term SQL milestone (like Discovery Meeting Held) in Days 6–14 with an expected proxy USD value.',
   },
   {
     id: 'zura_ingest',
@@ -199,7 +199,7 @@ const FLOW_NODES: FlowNodeDef[] = [
     subtitle: 'Hourly Data Manager API',
     tone: 'default',
     description:
-      'Hourly API sync sends approved SQL milestones and their expected SGD proxy value into Google Ads Data Manager.',
+      'Hourly API sync sends approved SQL milestones and their expected USD proxy value into Google Ads Data Manager.',
   },
   {
     id: 'attribution_core',
@@ -427,7 +427,7 @@ function buildDynamicRoute(controls: SimControls): {
       : `Day ${controls.daysSinceClick}: Sales confirms SQL (Meeting Held)`,
     detail: isLongWait
       ? `Waiting ${controls.daysSinceClick} days (2–5 months) for final signature pushes the event past Google’s short attribution window.`
-      : `Sales completes the discovery meeting on Day ${controls.daysSinceClick} and logs a qualified SQL with its expected SGD value.`,
+      : `Sales completes the discovery meeting on Day ${controls.daysSinceClick} and logs a qualified SQL with its expected USD value.`,
     funnelStageIdx: isLongWait ? 4 : 3,
   };
 
@@ -555,7 +555,7 @@ function buildDynamicRoute(controls: SimControls): {
         edgeFromPrev: 'gate_to_dm',
         headline: 'Sent via hourly API to Google Ads Data Manager',
         detail:
-          'Verified SQL milestone + expected SGD proxy value delivered cleanly to Primary Bidding.',
+          'Verified SQL milestone + expected USD proxy value delivered cleanly to Primary Bidding.',
         funnelStageIdx: 3,
       },
       {
@@ -810,7 +810,7 @@ export function FlowAndFunnelPage({
         roleLabel:
           sqlTarget === 'wait_closed_won'
             ? 'Skipped'
-            : `Primary · SGD ${active.proxyValue.toLocaleString()}`,
+            : `Primary · USD ${active.proxyValue.toLocaleString()}`,
         roleKind: sqlTarget === 'wait_closed_won' ? ('amber' as const) : ('primary' as const),
         fill: sqlTarget === 'wait_closed_won' ? '#D97706' : '#059669',
         fillHover: sqlTarget === 'wait_closed_won' ? '#B45309' : '#047857',
@@ -818,10 +818,10 @@ export function FlowAndFunnelPage({
         explanation:
           sqlTarget === 'wait_closed_won'
             ? 'Skipped when waiting for Closed-Won. Switching Primary Bidding back here gives Google clean signals inside 1–2 weeks.'
-            : `${active.summary} Sent via hourly API with Proxy Value = ${active.winRatePct}% win rate × SGD ${avgDealValue.toLocaleString()} avg deal.`,
+            : `${active.summary} Sent via hourly API with Proxy Value = ${active.winRatePct}% win rate × USD ${avgDealValue.toLocaleString()} avg deal.`,
         mlHeadline: 'The Google Ads Machine Learning Sweet Spot',
         whyThisMatters:
-          `Google Smart Bidding performs best with ~30+ verified conversions/month and short conversion lag. Sending ${sqlLabel} (~Day ${sqlDay}) via hourly API with an expected SGD ${active.proxyValue.toLocaleString()} proxy value trains auction-time ML during Weeks 1–2—safely beating both the 63-day ECL and 90-day GCLID limits.`,
+          `Google Smart Bidding performs best with ~30+ verified conversions/month and short conversion lag. Sending ${sqlLabel} (~Day ${sqlDay}) via hourly API with an expected USD ${active.proxyValue.toLocaleString()} proxy value trains auction-time ML during Weeks 1–2—safely beating both the 63-day ECL and 90-day GCLID limits.`,
         mlEffect: `Primary bidding signal (${sqlCount}/mo · Day ${sqlDay}) · Fuels value-based Smart Bidding`,
         whatGoogleLearns:
           'Identifies the exact search intent, demographics, devices, and times of day that turn into qualified sales meetings.',
@@ -1194,7 +1194,7 @@ export function FlowAndFunnelPage({
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600 font-medium">Monthly Ad Spend</span>
               <span className="font-mono font-semibold text-slate-900 tabular-nums">
-                SGD {adSpend.toLocaleString()}
+                USD {adSpend.toLocaleString()}
               </span>
             </div>
             <input
@@ -1230,7 +1230,7 @@ export function FlowAndFunnelPage({
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600 font-medium">Avg Closed-Won Deal</span>
               <span className="font-mono font-semibold text-slate-900 tabular-nums">
-                SGD {avgDealValue.toLocaleString()}
+                USD {avgDealValue.toLocaleString()}
               </span>
             </div>
             <input
@@ -1314,10 +1314,10 @@ export function FlowAndFunnelPage({
           <div className="px-5 py-4">
             <div className="text-xs text-slate-500">Proxy Value / Signal</div>
             <div className="mt-1 text-2xl font-bold font-mono tabular-nums text-slate-900">
-              SGD {report.active.proxyValue.toLocaleString()}
+              USD {report.active.proxyValue.toLocaleString()}
             </div>
             <div className="mt-0.5 text-xs text-slate-500 font-mono tabular-nums">
-              {report.active.winRatePct}% win × SGD {avgDealValue.toLocaleString()}
+              {report.active.winRatePct}% win × USD {avgDealValue.toLocaleString()}
             </div>
           </div>
 
@@ -1327,7 +1327,7 @@ export function FlowAndFunnelPage({
               {report.roas.toFixed(1)}x
             </div>
             <div className="mt-0.5 text-xs text-slate-500 font-mono tabular-nums">
-              Cost / SQL: SGD {report.costPerSignal.toLocaleString()}
+              Cost / SQL: USD {report.costPerSignal.toLocaleString()}
             </div>
           </div>
         </div>
@@ -1729,7 +1729,7 @@ export function FlowAndFunnelPage({
                 type="button"
                 onClick={() =>
                   onAskAssistant(
-                    `Explain our Demand Waterfall funnel (${monthlyInquiries} inquiries/mo, ${salesCycleDays}-day closing cycle, SGD ${avgDealValue} avg deal) and why focusing on ${report.active.stageTitle} beats waiting for Closed-Won.`
+                    `Explain our Demand Waterfall funnel (${monthlyInquiries} inquiries/mo, ${salesCycleDays}-day closing cycle, USD ${avgDealValue} avg deal) and why focusing on ${report.active.stageTitle} beats waiting for Closed-Won.`
                   )
                 }
                 className="pt-1 inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-800"
@@ -1868,7 +1868,7 @@ export function FlowAndFunnelPage({
                     {report.roi.baselineRoiPct.toLocaleString()}% ROI
                   </div>
                   <div className="mt-0.5 text-xs text-slate-600">
-                    SGD {report.roi.baselineRevenue.toLocaleString()}/mo ·{' '}
+                    USD {report.roi.baselineRevenue.toLocaleString()}/mo ·{' '}
                     {report.roi.baselineRoas.toFixed(1)}x
                   </div>
                   <div className="mt-0.5 text-[11px] font-sans text-slate-500">
@@ -1890,7 +1890,7 @@ export function FlowAndFunnelPage({
                     {report.roi.improvedRoiPct.toLocaleString()}% ROI
                   </div>
                   <div className="mt-0.5 text-xs text-slate-800 font-semibold">
-                    SGD {report.roi.improvedRevenue.toLocaleString()}/mo ·{' '}
+                    USD {report.roi.improvedRevenue.toLocaleString()}/mo ·{' '}
                     {report.roi.improvedRoas.toFixed(1)}x
                   </div>
                   <div className="mt-0.5 text-[11px] font-sans text-slate-500">
@@ -1908,10 +1908,10 @@ export function FlowAndFunnelPage({
                       report.roi.signalExpiredBlocked ? 'text-rose-700' : 'text-teal-700'
                     }`}
                   >
-                    +SGD {report.roi.monthlyRevenueUplift.toLocaleString()}/mo
+                    +USD {report.roi.monthlyRevenueUplift.toLocaleString()}/mo
                   </div>
                   <div className="mt-0.5 text-xs text-slate-700 font-semibold">
-                    +SGD {report.roi.annualRevenueUplift.toLocaleString()}/yr
+                    +USD {report.roi.annualRevenueUplift.toLocaleString()}/yr
                   </div>
                   <div className="mt-0.5 text-[11px] font-sans text-slate-500">
                     {report.roi.signalExpiredBlocked
@@ -1934,7 +1934,7 @@ export function FlowAndFunnelPage({
                       <div className="flex items-center justify-between">
                         <span className="text-slate-600">Monthly Google Ad Spend (Same Budget)</span>
                         <span className="font-mono font-semibold text-slate-700 tabular-nums">
-                          SGD {adSpend.toLocaleString()}
+                          USD {adSpend.toLocaleString()}
                         </span>
                       </div>
                       <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
@@ -1948,11 +1948,11 @@ export function FlowAndFunnelPage({
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="text-slate-600">
-                          Baseline Revenue (Form-Only · Cost/Deal: SGD{' '}
+                          Baseline Revenue (Form-Only · Cost/Deal: USD{' '}
                           {report.roi.baselineCostPerDeal.toLocaleString()})
                         </span>
                         <span className="font-mono font-semibold text-slate-900 tabular-nums">
-                          SGD {report.roi.baselineRevenue.toLocaleString()} / mo
+                          USD {report.roi.baselineRevenue.toLocaleString()} / mo
                         </span>
                       </div>
                       <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
@@ -1967,14 +1967,14 @@ export function FlowAndFunnelPage({
                       <div className="flex items-center justify-between">
                         <span className="font-medium text-slate-900">
                           Projected Revenue (SQL Signal +{report.roi.effectiveLiftPct}% · Cost/Deal:
-                          SGD {report.roi.improvedCostPerDeal.toLocaleString()})
+                          USD {report.roi.improvedCostPerDeal.toLocaleString()})
                         </span>
                         <span
                           className={`font-mono font-bold tabular-nums ${
                             report.roi.signalExpiredBlocked ? 'text-rose-700' : 'text-emerald-700'
                           }`}
                         >
-                          SGD {report.roi.improvedRevenue.toLocaleString()} / mo
+                          USD {report.roi.improvedRevenue.toLocaleString()} / mo
                         </span>
                       </div>
                       <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
@@ -2006,17 +2006,17 @@ export function FlowAndFunnelPage({
                   </span>
                 ) : (
                   <span className="text-slate-600">
-                    Same SGD {adSpend.toLocaleString()}/mo budget delivers{' '}
+                    Same USD {adSpend.toLocaleString()}/mo budget delivers{' '}
                     <strong className="text-slate-900 font-mono">
                       +{report.roi.roiGainPts.toLocaleString()}% ROI points
                     </strong>{' '}
                     and lowers Cost per Deal from{' '}
                     <span className="font-mono">
-                      SGD {report.roi.baselineCostPerDeal.toLocaleString()}
+                      USD {report.roi.baselineCostPerDeal.toLocaleString()}
                     </span>{' '}
                     to{' '}
                     <strong className="font-mono text-emerald-700">
-                      SGD {report.roi.improvedCostPerDeal.toLocaleString()}
+                      USD {report.roi.improvedCostPerDeal.toLocaleString()}
                     </strong>
                     .
                   </span>
@@ -2026,7 +2026,7 @@ export function FlowAndFunnelPage({
                   type="button"
                   onClick={() =>
                     onAskAssistant(
-                      `Summarize this ROI business case for leadership: on SGD ${adSpend}/mo ad spend with ${meetingBookedRatePct}% Inquiry-to-Meeting, ${meetingShowRatePct}% Meeting Show-to-SQL, and ${sqlWinRatePct}% SQL-to-Win rate (avg deal SGD ${avgDealValue}), a +${signalLiftPct}% SQL signal quality lift grows monthly revenue from SGD ${report.roi.baselineRevenue.toLocaleString()} (${report.roi.baselineRoiPct}% ROI) to SGD ${report.roi.improvedRevenue.toLocaleString()} (${report.roi.improvedRoiPct}% ROI), adding +SGD ${report.roi.annualRevenueUplift.toLocaleString()}/year.`
+                      `Summarize this ROI business case for leadership: on USD ${adSpend}/mo ad spend with ${meetingBookedRatePct}% Inquiry-to-Meeting, ${meetingShowRatePct}% Meeting Show-to-SQL, and ${sqlWinRatePct}% SQL-to-Win rate (avg deal USD ${avgDealValue}), a +${signalLiftPct}% SQL signal quality lift grows monthly revenue from USD ${report.roi.baselineRevenue.toLocaleString()} (${report.roi.baselineRoiPct}% ROI) to USD ${report.roi.improvedRevenue.toLocaleString()} (${report.roi.improvedRoiPct}% ROI), adding +USD ${report.roi.annualRevenueUplift.toLocaleString()}/year.`
                     )
                   }
                   className="inline-flex items-center gap-1.5 font-semibold text-teal-700 hover:text-teal-800 whitespace-nowrap"

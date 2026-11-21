@@ -41,7 +41,7 @@ const ZURA_TOOLS: FunctionDeclaration[] = [
   {
     name: 'summarizeUploadHealth',
     description:
-      'Summarize overall revenue attribution health: how many signals were sent by stage (Qualified, Quote Accepted, Completed Sale), attributed SGD revenue, pending/quarantined counts, and Customer Match audience separation.',
+      'Summarize overall revenue attribution health: how many signals were sent by stage (Qualified, Quote Accepted, Completed Sale), attributed USD revenue, pending/quarantined counts, and Customer Match audience separation.',
   },
 ];
 
@@ -103,7 +103,7 @@ function executeZuraTool(
           diagnostics: ctx.diagnostics,
           recentRuns: ctx.recentRuns,
         },
-        summary: `Loaded Google diagnostics & attributed revenue (SGD ${ctx.metrics.totalAttributedValueSgd})`,
+        summary: `Loaded Google diagnostics & attributed revenue (USD ${ctx.metrics.totalAttributedValueSgd})`,
       };
 
     case 'proposeSchedule': {
@@ -141,7 +141,7 @@ function executeZuraTool(
           scheduler: ctx.scheduler,
           recentRuns: ctx.recentRuns,
         },
-        summary: `Health summary: ${ctx.metrics.submitted} sent, ${ctx.metrics.attributed} attributed (SGD ${ctx.metrics.totalAttributedValueSgd})`,
+        summary: `Health summary: ${ctx.metrics.submitted} sent, ${ctx.metrics.attributed} attributed (USD ${ctx.metrics.totalAttributedValueSgd})`,
       };
 
     default:
@@ -172,7 +172,7 @@ STRICT DOMAIN RULES:
      * Inquiry / Raw Form Fill: Track only (never Primary—otherwise Google buys junk leads).
      * MQL & SAL: Secondary observation (measure funnel health without double-counting).
      * SQL (divided from Sales’ perspective into Meeting Booked [~Day 6], Meeting Held / Qualified [~Day 11 — recommended sweet spot], or Proposal Sent [~Day 24]): PRIMARY BIDDING GOAL! Lands well inside Google’s 63-day ECL and 90-day GCLID windows and hits ~30+ clean signals/month.
-     * Proxy Value (Revenue Thinking): Calculate Expected Pipeline Value per SQL = Avg Closed-Won Deal Value × Historical SQL-to-Win Rate (e.g., SGD 12,000 × 25% = SGD 3,000 per SQL Meeting Held) so Smart Bidding optimizes for revenue today without waiting 4 months!
+     * Proxy Value (Revenue Thinking): Calculate Expected Pipeline Value per SQL = Avg Closed-Won Deal Value × Historical SQL-to-Win Rate (e.g., USD 12,000 × 25% = USD 3,000 per SQL Meeting Held) so Smart Bidding optimizes for revenue today without waiting 4 months!
 5. Clearly explain official Google concepts simply when asked (always verified against Google Ads Help Center):
    - Enhanced Conversions for Leads (Official Google definition): "An upgraded version of offline conversion import that uses user-provided data, such as email addresses, to supplement imported offline conversion data to improve accuracy and bidding performance." Matches hashed website form data to signed-in Google users.
    - Offline Conversion Import (OCI) & GCLID (Official Google definition): Imports off-the-web outcomes (CRM, phone, in-person sales) back into Google Ads. GCLID (Google Click ID) is the unique URL tracking identifier from auto-tagging that links the offline outcome back to the ad click.
