@@ -29,6 +29,12 @@ const QUICK_PROMPTS = [
       'In plain marketer English, how many signals are we sending right now and what is our current attribution health?',
   },
   {
+    name: 'campaignTimeline',
+    label: 'How long do campaigns run?',
+    prompt:
+      'How long does a typical Google Ads paid campaign run, and why do we lose out on quality leads if we do not send a quality SQL signal early?',
+  },
+  {
     name: 'explainBlindBidding',
     label: 'What if we don’t send SQLs?',
     prompt:
@@ -65,7 +71,7 @@ export function AssistantDrawer({
             <Lock className="w-3 h-3 text-teal-700" />
             <span>Zero Customer PII Exposed</span>
           </div>
-          <h2 className="text-sm font-bold text-slate-900">Zura Marketing AI Assistant</h2>
+          <h2 className="text-sm font-bold text-slate-900">Google Ads Conversion Assistant</h2>
         </div>
         {onClose && (
           <button

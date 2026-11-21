@@ -13,7 +13,7 @@ const INITIAL_ASSISTANT_MESSAGE: AssistantMessage = {
   id: 'welcome_1',
   role: 'assistant',
   content:
-    'Hi! Ask me anything in plain English about your Demand Waterfall funnel, short-term SQL bidding (Meeting Booked vs Meeting Held), Google’s 63-day ECL vs 90-day GCLID limits, or your live signal volume.',
+    'Hi! Ask me anything in plain English about Google Ads conversions, your Demand Waterfall funnel, typical campaign run lengths (3–6 months), short-term SQL bidding, or Google’s 63-day ECL vs 90-day GCLID windows.',
   timestamp: new Date().toLocaleTimeString('en-SG', {
     hour: '2-digit',
     minute: '2-digit',
@@ -135,7 +135,7 @@ export default function App() {
           href="#funnel"
           className="text-base font-bold tracking-tight text-slate-900 font-display whitespace-nowrap shrink-0"
         >
-          Zura Conversions
+          Google Ads Conversions
         </a>
 
         <nav className="hidden sm:flex items-center gap-6 text-sm font-medium text-slate-600">
@@ -144,6 +144,12 @@ export default function App() {
             className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
           >
             Demand Funnel
+          </a>
+          <a
+            href="#campaign-timeline"
+            className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
+          >
+            Campaign Timeline
           </a>
           <a
             href="#flowchart"

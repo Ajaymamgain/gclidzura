@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownRight,
+  Info,
   Pause,
   Play,
   RotateCcw,
   SkipForward,
   Sparkles,
+  X,
 } from 'lucide-react';
 import type { WorkspaceState } from '../types/zura.ts';
 
@@ -128,7 +130,7 @@ const FLOW_NODES: FlowNodeDef[] = [
     w: 164,
     h: 76,
     stepTag: '04',
-    title: 'Zura Auto-Sync API',
+    title: 'Conversion Sync API',
     subtitle: 'Streams Only New SQLs',
     tone: 'default',
     description:
@@ -413,7 +415,7 @@ function buildDynamicRoute(controls: SimControls): {
       : 'Website inquiry records Consent DENIED',
     detail: controls.consentGranted
       ? 'Site saves GCLID + consented email/phone. Raw form fills are tracked only so junk leads never train bidding.'
-      : 'Prospect declined ad data sharing; Zura enforces Consent = DENIED automatically.',
+      : 'Prospect declined ad data sharing; consent enforcement records Consent = DENIED automatically.',
     funnelStageIdx: 1,
   };
 
@@ -452,7 +454,7 @@ function buildDynamicRoute(controls: SimControls): {
   const step4: DynamicStep = {
     nodeId: 'zura_ingest',
     edgeFromPrev: 'sales_to_ingest',
-    headline: 'CRM automatically streams the confirmed milestone to Zura API',
+    headline: 'CRM automatically streams the confirmed milestone to the Conversion API',
     detail: 'Only this newly confirmed CRM update enters the hourly delta queue.',
     funnelStageIdx: isLongWait ? 4 : 3,
   };
@@ -470,7 +472,7 @@ function buildDynamicRoute(controls: SimControls): {
           nodeId: 'privacy_gate',
           edgeFromPrev: 'ingest_to_gate',
           headline: 'Privacy gate stops event (Consent Denied)',
-          detail: 'Zura never sends customer identifiers without valid ad consent.',
+          detail: 'The pipeline never sends customer identifiers without valid ad consent.',
           funnelStageIdx: -1,
         },
         {
@@ -579,6 +581,13 @@ export function FlowAndFunnelPage({
   const [salesCycleDays, setSalesCycleDays] = useState<number>(120);
   const [sqlTarget, setSqlTarget] = useState<SqlTargetId>('meeting_held');
   const [selectedStageIdx, setSelectedStageIdx] = useState<number>(3);
+  const [expandedStageIdx, setExpandedStageIdx] = useState<number | null>(null);
+
+  // User-Defined Conversion Rates & Signal Quality Lift (Powers Funnel + ROI Estimator)
+  const [meetingBookedRatePct, setMeetingBookedRatePct] = useState<number>(24);
+  const [meetingShowRatePct, setMeetingShowRatePct] = useState<number>(70);
+  const [sqlWinRatePct, setSqlWinRatePct] = useState<number>(24);
+  const [signalLiftPct, setSignalLiftPct] = useState<number>(35);
 
   // Interactive Flowchart State
   const [controls, setControls] = useState<SimControls>(PRESETS[0].controls);
@@ -592,15 +601,22 @@ export function FlowAndFunnelPage({
   const pathRefs = useRef<Record<string, SVGPathElement | null>>({});
   const flowchartRef = useRef<HTMLElement | null>(null);
 
-  // Demand Waterfall Math
+  // Demand Waterfall + Revenue & ROI Math (Powered by User-Defined Conversion Rates)
   const report = useMemo(() => {
     const inquiries = monthlyInquiries;
-    const mqls = Math.round(inquiries * 0.55);
-    const sals = Math.round(inquiries * 0.35);
-    const meetingBooked = Math.round(inquiries * 0.24);
-    const meetingHeld = Math.round(inquiries * 0.17);
-    const proposalSent = Math.round(inquiries * 0.1);
-    const closedWon = Math.max(1, Math.round(inquiries * 0.04));
+    const meetingBooked = Math.max(1, Math.round(inquiries * (meetingBookedRatePct / 100)));
+    const meetingHeld = Math.max(1, Math.round(meetingBooked * (meetingShowRatePct / 100)));
+    const proposalSent = Math.max(1, Math.round(meetingHeld * 0.6));
+    const closedWonExact = meetingHeld * (sqlWinRatePct / 100);
+    const closedWon = Math.max(1, Math.round(closedWonExact));
+
+    // Keep MQL and SAL geometrically consistent above Meeting Booked
+    const sals = Math.min(inquiries, Math.max(meetingBooked, Math.round(inquiries * Math.max(0.35, (meetingBookedRatePct / 100) * 1.4))));
+    const mqls = Math.min(inquiries, Math.max(sals, Math.round(inquiries * Math.max(0.55, (meetingBookedRatePct / 100) * 1.9))));
+
+    const bookedWinRatePct = Math.min(100, Math.round((closedWonExact / Math.max(1, meetingBooked)) * 100));
+    const heldWinRatePct = sqlWinRatePct;
+    const proposalWinRatePct = Math.min(100, Math.round((closedWonExact / Math.max(1, proposalSent)) * 100));
 
     const goalOptions: Record<
       SqlTargetId,
@@ -624,8 +640,8 @@ export function FlowAndFunnelPage({
         stageTitle: 'SQL — Meeting Booked',
         avgDays: 6,
         signals: meetingBooked,
-        winRatePct: Math.round((closedWon / Math.max(1, meetingBooked)) * 100),
-        proxyValue: Math.round((closedWon / Math.max(1, meetingBooked)) * avgDealValue),
+        winRatePct: bookedWinRatePct,
+        proxyValue: Math.round((closedWonExact / Math.max(1, meetingBooked)) * avgDealValue),
         eclSafe: true,
         gclidSafe: true,
         hits30: meetingBooked >= 30,
@@ -638,8 +654,8 @@ export function FlowAndFunnelPage({
         stageTitle: 'SQL — Meeting Held',
         avgDays: 11,
         signals: meetingHeld,
-        winRatePct: Math.round((closedWon / Math.max(1, meetingHeld)) * 100),
-        proxyValue: Math.round((closedWon / Math.max(1, meetingHeld)) * avgDealValue),
+        winRatePct: heldWinRatePct,
+        proxyValue: Math.round((heldWinRatePct / 100) * avgDealValue),
         eclSafe: true,
         gclidSafe: true,
         hits30: meetingHeld >= 30,
@@ -652,8 +668,8 @@ export function FlowAndFunnelPage({
         stageTitle: 'SQL — Proposal Sent',
         avgDays: 24,
         signals: proposalSent,
-        winRatePct: Math.round((closedWon / Math.max(1, proposalSent)) * 100),
-        proxyValue: Math.round((closedWon / Math.max(1, proposalSent)) * avgDealValue),
+        winRatePct: proposalWinRatePct,
+        proxyValue: Math.round((closedWonExact / Math.max(1, proposalSent)) * avgDealValue),
         eclSafe: true,
         gclidSafe: true,
         hits30: proposalSent >= 30,
@@ -684,11 +700,38 @@ export function FlowAndFunnelPage({
       sqlTarget === 'wait_closed_won' ? 'SQL — Meeting Held' : active.stageTitle;
     const sqlDay = sqlTarget === 'wait_closed_won' ? 11 : active.avgDays;
 
-    const pipelineValue = active.signals * active.proxyValue;
+    const pipelineValue = Math.round(closedWonExact * avgDealValue);
     const costPerSignal = active.signals > 0 ? Math.round(adSpend / active.signals) : 0;
     const roas = adSpend > 0 ? pipelineValue / adSpend : 0;
 
-    // 5 Actual Report Funnel Tiers
+    // Revenue & ROI Estimation: Baseline (Form-Only) vs Improved Signal Quality (Short-Term SQL API)
+    const signalExpiredBlocked = sqlTarget === 'wait_closed_won' && salesCycleDays > 90;
+    const effectiveLiftPct = signalExpiredBlocked ? 0 : signalLiftPct;
+    const liftMultiplier = 1 + effectiveLiftPct / 100;
+
+    const baselineMeetings = meetingHeld;
+    const baselineDealsExact = closedWonExact;
+    const baselineRevenue = Math.round(baselineDealsExact * avgDealValue);
+    const baselineRoiPct = adSpend > 0 ? Math.round(((baselineRevenue - adSpend) / adSpend) * 100) : 0;
+    const baselineRoas = adSpend > 0 ? baselineRevenue / adSpend : 0;
+    const baselineCostPerDeal =
+      baselineDealsExact > 0 ? Math.round(adSpend / baselineDealsExact) : 0;
+
+    const improvedMeetings = Math.round(baselineMeetings * liftMultiplier);
+    const improvedDealsExact = baselineDealsExact * liftMultiplier;
+    const improvedRevenue = Math.round(improvedDealsExact * avgDealValue);
+    const improvedRoiPct = adSpend > 0 ? Math.round(((improvedRevenue - adSpend) / adSpend) * 100) : 0;
+    const improvedRoas = adSpend > 0 ? improvedRevenue / adSpend : 0;
+    const improvedCostPerDeal =
+      improvedDealsExact > 0 ? Math.round(adSpend / improvedDealsExact) : 0;
+
+    const monthlyRevenueUplift = improvedRevenue - baselineRevenue;
+    const annualRevenueUplift = monthlyRevenueUplift * 12;
+    const roiGainPts = improvedRoiPct - baselineRoiPct;
+    const extraMeetingsPerMonth = improvedMeetings - baselineMeetings;
+    const extraDealsPerMonth = improvedDealsExact - baselineDealsExact;
+
+    // 5 Actual Report Funnel Tiers (with Google Ads Machine Learning explanations)
     const tiers = [
       {
         idx: 0,
@@ -705,6 +748,12 @@ export function FlowAndFunnelPage({
         preset: 'blind_no_conversion' as PresetId,
         explanation:
           'All ad clicks that submit a form. Captures GCLID + consented email/phone, but never set as Primary Bidding or Google chases low-intent clicks.',
+        mlHeadline: 'Captures Click Identity — Never Trains Bidding',
+        whyThisMatters:
+          'On Day 0, your website tag captures the GCLID receipt and consented email/phone (ECL) so downstream milestones can be matched later. Keeping raw form fills as Track Only prevents Google Ads machine learning from chasing cheap clicks, bots, and price-shoppers who submit forms but never buy.',
+        mlEffect: 'Identity foundation only · 0% bidding weight (blocks junk-lead drift)',
+        whatGoogleLearns:
+          'Without downstream SQL signals, Google treats a spam form the exact same as a real buyer.',
       },
       {
         idx: 1,
@@ -721,6 +770,12 @@ export function FlowAndFunnelPage({
         preset: 'enhanced_no_gclid' as PresetId,
         explanation:
           'Leads matching territory, budget fit, and service criteria. Tracked as Secondary observation so you can measure funnel health without double-counting.',
+        mlHeadline: 'Filters Out-of-Scope Traffic Without Double-Counting',
+        whyThisMatters:
+          'MQLs remove wrong regions, job seekers, and unqualified fits within 24–48 hours. Sending MQL as a Secondary conversion lets marketers audit which campaigns bring relevant leads without distorting Smart Bidding’s primary optimization target.',
+        mlEffect: 'Diagnostic observation signal · Safely inside 63d ECL & 90d GCLID windows',
+        whatGoogleLearns:
+          'Reported in your campaign columns for marketer review without diluting Primary SQL bidding.',
       },
       {
         idx: 2,
@@ -737,6 +792,12 @@ export function FlowAndFunnelPage({
         preset: 'sql_meeting_held' as PresetId,
         explanation:
           'Sales accepts the lead and begins booking a discovery call. Kept as Secondary observation until the SQL milestone happens.',
+        mlHeadline: 'Human Sales Check Before Confirming Intent',
+        whyThisMatters:
+          'Sales reps verify the contact is reachable and fits your ideal customer profile (Days 3–5). Holding this as Secondary stops Google’s algorithm from over-bidding on leads that look good on paper but never show up for a meeting.',
+        mlEffect: 'Bridges Marketing & Sales handoff · Protects Smart Bidding from no-shows',
+        whatGoogleLearns:
+          'Measures Sales acceptance speed so you spot lead-quality drops before revenue suffers.',
       },
       {
         idx: 3,
@@ -758,6 +819,12 @@ export function FlowAndFunnelPage({
           sqlTarget === 'wait_closed_won'
             ? 'Skipped when waiting for Closed-Won. Switching Primary Bidding back here gives Google clean signals inside 1–2 weeks.'
             : `${active.summary} Sent via hourly API with Proxy Value = ${active.winRatePct}% win rate × SGD ${avgDealValue.toLocaleString()} avg deal.`,
+        mlHeadline: 'The Google Ads Machine Learning Sweet Spot',
+        whyThisMatters:
+          `Google Smart Bidding performs best with ~30+ verified conversions/month and short conversion lag. Sending ${sqlLabel} (~Day ${sqlDay}) via hourly API with an expected SGD ${active.proxyValue.toLocaleString()} proxy value trains auction-time ML during Weeks 1–2—safely beating both the 63-day ECL and 90-day GCLID limits.`,
+        mlEffect: `Primary bidding signal (${sqlCount}/mo · Day ${sqlDay}) · Fuels value-based Smart Bidding`,
+        whatGoogleLearns:
+          'Identifies the exact search intent, demographics, devices, and times of day that turn into qualified sales meetings.',
       },
       {
         idx: 4,
@@ -765,7 +832,7 @@ export function FlowAndFunnelPage({
         title: `Closed-Won (${(salesCycleDays / 30).toFixed(1)} mo)`,
         count: closedWon,
         pctOfTop: Math.max(1, Math.round((closedWon / inquiries) * 100)),
-        stepConvPct: Math.round((closedWon / Math.max(1, sqlCount)) * 100),
+        stepConvPct: Math.round((closedWonExact / Math.max(1, sqlCount)) * 100),
         dayLabel: `Day ${salesCycleDays}`,
         roleLabel:
           salesCycleDays > 90
@@ -778,6 +845,14 @@ export function FlowAndFunnelPage({
         fillHover: sqlTarget === 'wait_closed_won' ? '#B91C1C' : '#64748B',
         preset: 'long_cycle_120_day' as PresetId,
         explanation: `Final signed revenue at Day ${salesCycleDays}. Bypassed for real-time Google Ads bidding because it crosses Google’s 63d ECL / 90d GCLID windows—instead, its win rate prices your SQL above.`,
+        mlHeadline: 'Calibrates SQL Value — Too Slow for Real-Time ML',
+        whyThisMatters: `At Day ${salesCycleDays} (${(salesCycleDays / 30).toFixed(1)} months), final sales arrive after Google’s 63-day ECL and 90-day GCLID attribution clocks expire—and typically produce too few monthly events (${closedWon}/mo) for Smart Bidding to learn. Use Closed-Won win rates (${sqlWinRatePct}%) to price your SQL milestone instead.`,
+        mlEffect:
+          salesCycleDays > 90
+            ? 'Dropped by Google (>90d) · Use strictly to calculate SQL proxy value'
+            : 'Too slow & low-volume for bidding · Use to calibrate SQL proxy value',
+        whatGoogleLearns:
+          'When bidding waits for Closed-Won, Google’s ML stays starved of data throughout a 3-month paid campaign.',
       },
     ];
 
@@ -785,11 +860,45 @@ export function FlowAndFunnelPage({
       goalOptions,
       active,
       tiers,
+      meetingBooked,
+      meetingHeld,
+      closedWonExact,
       pipelineValue,
       costPerSignal,
       roas,
+      roi: {
+        signalExpiredBlocked,
+        effectiveLiftPct,
+        baselineMeetings,
+        baselineDealsExact,
+        baselineRevenue,
+        baselineRoiPct,
+        baselineRoas,
+        baselineCostPerDeal,
+        improvedMeetings,
+        improvedDealsExact,
+        improvedRevenue,
+        improvedRoiPct,
+        improvedRoas,
+        improvedCostPerDeal,
+        monthlyRevenueUplift,
+        annualRevenueUplift,
+        roiGainPts,
+        extraMeetingsPerMonth,
+        extraDealsPerMonth,
+      },
     };
-  }, [adSpend, monthlyInquiries, avgDealValue, salesCycleDays, sqlTarget]);
+  }, [
+    adSpend,
+    monthlyInquiries,
+    avgDealValue,
+    salesCycleDays,
+    sqlTarget,
+    meetingBookedRatePct,
+    meetingShowRatePct,
+    sqlWinRatePct,
+    signalLiftPct,
+  ]);
 
   const selectedTier = report.tiers[selectedStageIdx] ?? report.tiers[3];
 
@@ -830,6 +939,15 @@ export function FlowAndFunnelPage({
   }, [currentStep, speedMs]);
 
   useEffect(() => {
+    if (expandedStageIdx === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setExpandedStageIdx(null);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [expandedStageIdx]);
+
+  useEffect(() => {
     if (!isPlaying) return;
     const timer = window.setTimeout(() => {
       if (safeStepIdx < route.steps.length - 1) {
@@ -848,12 +966,6 @@ export function FlowAndFunnelPage({
     setIsPlaying(true);
   };
 
-  const playPresetById = (presetId: PresetId) => {
-    const found = PRESETS.find((p) => p.id === presetId);
-    if (found) applyPreset(found);
-    flowchartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const updateControl = (patch: Partial<SimControls>) => {
     setActivePreset(null);
     setControls((prev) => ({
@@ -865,9 +977,99 @@ export function FlowAndFunnelPage({
     setIsPlaying(true);
   };
 
+  const runFlowForFunnelStage = (stageIdx: number, shouldScroll = true) => {
+    setSelectedStageIdx(stageIdx);
+
+    if (stageIdx === 0) {
+      // Raw Inquiry / Form Fill without sending SQL back -> Blind Form Bidding
+      setActivePreset('blind_no_conversion');
+      setControls({
+        gclidPresent: true,
+        daysSinceClick: 1,
+        consentGranted: true,
+        sendConversionApi: false,
+        audienceOnly: false,
+      });
+    } else if (stageIdx === 1) {
+      // MQL -> Cross-device ECL Backup match inside 63d window
+      setActivePreset('enhanced_no_gclid');
+      setControls({
+        gclidPresent: false,
+        daysSinceClick: 2,
+        consentGranted: true,
+        sendConversionApi: true,
+        audienceOnly: false,
+      });
+    } else if (stageIdx === 2) {
+      // SAL -> Fast sales handoff with GCLID + ECL
+      setActivePreset('sql_meeting_held');
+      setControls({
+        gclidPresent: true,
+        daysSinceClick: 5,
+        consentGranted: true,
+        sendConversionApi: true,
+        audienceOnly: false,
+      });
+    } else if (stageIdx === 3) {
+      // Short-Term SQL Goal -> uses selected SQL target's exact day (Day 6 / 11 / 24)
+      const sqlDay = sqlTarget === 'wait_closed_won' ? 11 : report.active.avgDays;
+      setActivePreset('sql_meeting_held');
+      setControls({
+        gclidPresent: true,
+        daysSinceClick: sqlDay,
+        consentGranted: true,
+        sendConversionApi: true,
+        audienceOnly: false,
+      });
+    } else {
+      // Closed-Won Sale -> uses the actual Sales Closing Cycle slider (e.g., Day 120!)
+      const presetMatch: PresetId | null =
+        salesCycleDays > 90
+          ? 'long_cycle_120_day'
+          : salesCycleDays > 63
+            ? 'ecl_expired_63_saved_by_gclid'
+            : null;
+      setActivePreset(presetMatch);
+      setControls({
+        gclidPresent: true,
+        daysSinceClick: salesCycleDays,
+        consentGranted: true,
+        sendConversionApi: true,
+        audienceOnly: false,
+      });
+    }
+
+    setStepIdx(0);
+    setIsPlaying(true);
+
+    if (shouldScroll) {
+      window.setTimeout(() => {
+        flowchartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 60);
+    }
+  };
+
   const handleSelectGoal = (id: SqlTargetId) => {
     setSqlTarget(id);
-    setSelectedStageIdx(id === 'wait_closed_won' ? 4 : 3);
+    const stageIdx = id === 'wait_closed_won' ? 4 : 3;
+    setSelectedStageIdx(stageIdx);
+    const targetDay = report.goalOptions[id].avgDays;
+    setActivePreset(
+      id === 'wait_closed_won' && targetDay > 90
+        ? 'long_cycle_120_day'
+        : id !== 'wait_closed_won'
+          ? 'sql_meeting_held'
+          : null
+    );
+    setControls({
+      gclidPresent: true,
+      daysSinceClick: targetDay,
+      consentGranted: true,
+      sendConversionApi: true,
+      audienceOnly: false,
+    });
+    setStepIdx(0);
+    setIsPlaying(true);
   };
 
   const visitedNodeIds = useMemo(() => {
@@ -946,14 +1148,14 @@ export function FlowAndFunnelPage({
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span>{workspace?.businessName ?? 'CoolCare Aircon & Home Services'}</span>
+            <span>Google Ads Conversion Report</span>
             <span aria-hidden="true">·</span>
-            <span>Demand Waterfall Report</span>
+            <span>Demand Waterfall</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono">API Auto-Sync</span>
           </div>
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">
-            SQL Demand Funnel &amp; Conversion Flow
+            Google Ads Conversion Funnel &amp; Flow
           </h1>
         </div>
 
@@ -1142,7 +1344,7 @@ export function FlowAndFunnelPage({
               Demand Waterfall Funnel
             </h2>
             <p className="text-xs text-slate-500">
-              Click any funnel stage to inspect its conversion rate, timing, and Google Ads bidding role.
+              Click any funnel segment to expand <strong className="text-slate-700">Why this matters</strong> for Google Ads machine learning and sync the flowchart below.
             </p>
           </div>
           <div className="flex items-center gap-3 text-xs text-slate-500 font-mono">
@@ -1153,11 +1355,12 @@ export function FlowAndFunnelPage({
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12">
-          {/* Left (8 cols): Actual Centered SVG Trapezoid Funnel Report */}
-          <div className="lg:col-span-8 p-5 overflow-x-auto">
+          {/* Left (8 cols): Actual Centered SVG Trapezoid Funnel Report + Click-to-Expand Popover */}
+          <div className="lg:col-span-8 p-5 relative">
+            <div className="overflow-x-auto">
             <svg
-              viewBox="0 0 740 416"
-              className="w-full min-w-[620px] h-auto select-none"
+              viewBox="0 0 768 416"
+              className="w-full min-w-[640px] h-auto select-none"
               role="img"
               aria-label="Demand Waterfall Funnel from Inquiries to Closed-Won Sale"
             >
@@ -1175,7 +1378,7 @@ export function FlowAndFunnelPage({
               >
                 MONTHLY VOLUME &amp; % OF INQUIRIES
               </text>
-              <text x={556} y={10} fontSize={10} fontWeight={600} fill="#64748B">
+              <text x={550} y={10} fontSize={10} fontWeight={600} fill="#64748B">
                 STEP CONV. · GOOGLE ROLE
               </text>
 
@@ -1184,7 +1387,7 @@ export function FlowAndFunnelPage({
                 <line
                   x1={12}
                   y1={cutoffY}
-                  x2={728}
+                  x2={756}
                   y2={cutoffY}
                   stroke="#E11D48"
                   strokeWidth={1.5}
@@ -1216,6 +1419,7 @@ export function FlowAndFunnelPage({
               {/* Funnel Trapezoids */}
               {funnelGeometry.map(({ tier, yMid, cx, points }) => {
                 const isSelected = selectedStageIdx === tier.idx;
+                const isExpanded = expandedStageIdx === tier.idx;
                 const isActiveFlow = currentStep.funnelStageIdx === tier.idx;
                 const isPrimaryGoal =
                   (tier.idx === 3 && sqlTarget !== 'wait_closed_won') ||
@@ -1224,22 +1428,41 @@ export function FlowAndFunnelPage({
                 return (
                   <g
                     key={tier.code}
-                    onClick={() => setSelectedStageIdx(tier.idx)}
-                    className="cursor-pointer group"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={isExpanded}
+                    onClick={() => {
+                      if (expandedStageIdx === tier.idx) {
+                        setExpandedStageIdx(null);
+                      } else {
+                        setExpandedStageIdx(tier.idx);
+                        runFlowForFunnelStage(tier.idx, false);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (expandedStageIdx === tier.idx) {
+                          setExpandedStageIdx(null);
+                        } else {
+                          setExpandedStageIdx(tier.idx);
+                          runFlowForFunnelStage(tier.idx, false);
+                        }
+                      }
+                    }}
+                    className="cursor-pointer group focus:outline-none"
                   >
-                    {/* Subtle row highlight when selected */}
-                    {isSelected && (
-                      <rect
-                        x={6}
-                        y={yMid - 34}
-                        width={728}
-                        height={68}
-                        rx={8}
-                        fill="#F8FAFC"
-                        stroke="#CBD5E1"
-                        strokeWidth={1}
-                      />
-                    )}
+                    {/* Subtle row highlight when selected or expanded */}
+                    <rect
+                      x={6}
+                      y={yMid - 34}
+                      width={756}
+                      height={68}
+                      rx={8}
+                      fill={isExpanded ? '#F0FDFA' : isSelected ? '#F8FAFC' : 'transparent'}
+                      stroke={isExpanded ? '#0D9488' : isSelected ? '#CBD5E1' : 'transparent'}
+                      strokeWidth={isExpanded ? 1.5 : 1}
+                    />
 
                     {/* Left Label: Stage Name & Timing */}
                     <text
@@ -1264,15 +1487,17 @@ export function FlowAndFunnelPage({
                     {/* Center Actual Funnel Trapezoid */}
                     <polygon
                       points={points}
-                      fill={isSelected ? tier.fillHover : tier.fill}
+                      fill={isExpanded || isSelected ? tier.fillHover : tier.fill}
                       stroke={
-                        isActiveFlow
+                        isExpanded
                           ? '#0F172A'
-                          : isPrimaryGoal
-                            ? '#047857'
-                            : 'none'
+                          : isActiveFlow
+                            ? '#0F172A'
+                            : isPrimaryGoal
+                              ? '#047857'
+                              : 'none'
                       }
-                      strokeWidth={isActiveFlow ? 2.5 : isPrimaryGoal ? 1.5 : 0}
+                      strokeWidth={isExpanded || isActiveFlow ? 2.5 : isPrimaryGoal ? 1.5 : 0}
                       opacity={tier.idx === 4 && sqlTarget !== 'wait_closed_won' ? 0.72 : 1}
                     />
 
@@ -1299,9 +1524,9 @@ export function FlowAndFunnelPage({
                       {tier.pctOfTop}% of inquiries
                     </text>
 
-                    {/* Right Column: Step-to-Step Conversion & Google Ads Role */}
+                    {/* Right Column: Step-to-Step Conversion, Google Role & Expand Affordance */}
                     <text
-                      x={556}
+                      x={550}
                       y={yMid - 4}
                       fontSize={11.5}
                       fontWeight={600}
@@ -1311,7 +1536,7 @@ export function FlowAndFunnelPage({
                       {tier.idx === 0 ? '100% baseline' : `${tier.stepConvPct}% from prev`}
                     </text>
                     <text
-                      x={556}
+                      x={550}
                       y={yMid + 14}
                       fontSize={11}
                       fontWeight={tier.roleKind === 'primary' || tier.roleKind === 'danger' ? 700 : 500}
@@ -1327,10 +1552,108 @@ export function FlowAndFunnelPage({
                     >
                       {tier.roleLabel}
                     </text>
+
+                    <text
+                      x={752}
+                      y={yMid + 4}
+                      textAnchor="end"
+                      fontSize={10.5}
+                      fontWeight={600}
+                      fill={isExpanded ? '#0F766E' : '#64748B'}
+                    >
+                      {isExpanded ? 'Close ×' : 'Why? ▾'}
+                    </text>
                   </g>
                 );
               })}
             </svg>
+            </div>
+
+            {/* Anchored 'Why This Matters' Popover for Expanded Funnel Segment */}
+            {expandedStageIdx !== null && (() => {
+              const geom = funnelGeometry[expandedStageIdx];
+              if (!geom) return null;
+              const { tier, yTop, yBot } = geom;
+              const openUpward = expandedStageIdx >= 3;
+              const topPct = Math.min(72, Math.max(10, (yBot / 416) * 100));
+              const bottomPct = Math.min(72, Math.max(10, ((416 - yTop) / 416) * 100));
+
+              return (
+                <div
+                  role="dialog"
+                  aria-label={`Why ${tier.title} matters for Google Ads machine learning`}
+                  className="absolute inset-x-4 sm:left-auto sm:right-6 sm:w-[410px] z-20 bg-white border border-slate-300 rounded-xl shadow-xl p-4 space-y-3"
+                  style={openUpward ? { bottom: `${bottomPct}%` } : { top: `${topPct}%` }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-teal-700">
+                        <Info className="w-3.5 h-3.5" />
+                        <span>Why this matters · Google Ads ML</span>
+                      </div>
+                      <h4 className="mt-0.5 text-sm font-bold text-slate-900">
+                        {tier.code}: {tier.mlHeadline}
+                      </h4>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedStageIdx(null)}
+                      aria-label="Close popover"
+                      className="p-1 text-slate-400 hover:text-slate-900 rounded-md hover:bg-slate-100 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {tier.whyThisMatters}
+                  </p>
+
+                  <div className="pt-2.5 border-t border-slate-200 space-y-1.5 text-xs">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-slate-500 shrink-0">ML Signal Impact</span>
+                      <span className="font-mono text-[11px] font-semibold text-slate-900 text-right">
+                        {tier.mlEffect}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="text-slate-500 shrink-0">What Google Learns</span>
+                      <span className="text-[11px] text-slate-700 text-right">
+                        {tier.whatGoogleLearns}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2.5 border-t border-slate-200 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedStageIdx(null);
+                        runFlowForFunnelStage(tier.idx, true);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg transition-colors whitespace-nowrap"
+                    >
+                      <Play className="w-3 h-3" />
+                      <span>Watch Flow Below</span>
+                      <ArrowDownRight className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedStageIdx(null);
+                        onAskAssistant(
+                          `Explain in plain marketer English why the ${tier.title} (${tier.code}, ${tier.dayLabel}) stage matters for Google Ads Smart Bidding machine learning.`
+                        );
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-teal-700 hover:text-teal-800 whitespace-nowrap"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Ask AI</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Right (4 cols): Clean Selected Stage Inspector + Verified Google Rules */}
@@ -1376,11 +1699,11 @@ export function FlowAndFunnelPage({
 
               <button
                 type="button"
-                onClick={() => playPresetById(selectedTier.preset)}
+                onClick={() => runFlowForFunnelStage(selectedTier.idx, true)}
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-teal-700 hover:bg-teal-800 rounded-lg transition-colors"
               >
                 <Play className="w-3.5 h-3.5" />
-                <span>Play This Stage in Flowchart</span>
+                <span>Replay {selectedTier.code} in Flowchart</span>
                 <ArrowDownRight className="w-3.5 h-3.5" />
               </button>
             </div>
@@ -1417,9 +1740,483 @@ export function FlowAndFunnelPage({
             </div>
           </div>
         </div>
+
+        {/* Integrated Revenue & ROI Estimation Tool (Directly Linked to Funnel Conversion Rates) */}
+        <div className="border-t border-slate-200 bg-slate-50/50">
+          <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Revenue &amp; ROI Estimator — Financial Impact of Improved Signal Quality
+              </h3>
+              <p className="text-xs text-slate-500">
+                Adjust your meeting &amp; SQL conversion rates below (updates the funnel above in real time) to estimate potential monthly &amp; annual ROI from sending SQL signals to Google Ads.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-1 p-1 bg-slate-200/75 rounded-lg">
+              {[
+                { label: '+20% Conservative', val: 20 },
+                { label: '+35% Typical', val: 35 },
+                { label: '+50% Strong', val: 50 },
+              ].map((opt) => (
+                <button
+                  key={opt.val}
+                  type="button"
+                  onClick={() => setSignalLiftPct(opt.val)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                    signalLiftPct === opt.val
+                      ? 'bg-white text-slate-900 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12">
+            {/* Left (5 cols): User-Defined Conversion Rates for Meetings & SQLs */}
+            <div className="lg:col-span-5 p-6 space-y-4 border-b lg:border-b-0 lg:border-r border-slate-200 bg-white">
+              <div className="text-xs font-semibold text-slate-900">
+                Your Funnel Conversion Rates
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Inquiry → Meeting Booked</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                    {meetingBookedRatePct}% ({report.meetingBooked}/mo)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={8}
+                  max={50}
+                  step={1}
+                  value={meetingBookedRatePct}
+                  onChange={(e) => setMeetingBookedRatePct(Number(e.target.value))}
+                  className="w-full accent-teal-700 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Meeting Show → SQL Qualified</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                    {meetingShowRatePct}% ({report.meetingHeld} SQLs/mo)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={30}
+                  max={95}
+                  step={5}
+                  value={meetingShowRatePct}
+                  onChange={(e) => setMeetingShowRatePct(Number(e.target.value))}
+                  className="w-full accent-teal-700 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">SQL → Closed-Won Win Rate</span>
+                  <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                    {sqlWinRatePct}% ({report.closedWonExact.toFixed(1)} deals/mo)
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={5}
+                  max={60}
+                  step={1}
+                  value={sqlWinRatePct}
+                  onChange={(e) => setSqlWinRatePct(Number(e.target.value))}
+                  className="w-full accent-emerald-600 cursor-pointer"
+                />
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">Expected SQL Quality Lift (Smart Bidding)</span>
+                  <span className="font-mono font-semibold text-teal-700 tabular-nums">
+                    +{signalLiftPct}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={80}
+                  step={5}
+                  value={signalLiftPct}
+                  onChange={(e) => setSignalLiftPct(Number(e.target.value))}
+                  className="w-full accent-teal-700 cursor-pointer"
+                />
+              </div>
+            </div>
+
+            {/* Right (7 cols): Live ROI & Financial Uplift Readout + Comparison Bars */}
+            <div className="lg:col-span-7 p-6 flex flex-col justify-between gap-5">
+              {/* 3-Column ROI & Revenue Comparison */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-4 border-b border-slate-200 font-mono tabular-nums">
+                <div>
+                  <div className="text-[11px] font-sans text-slate-500">
+                    Baseline (Form-Only)
+                  </div>
+                  <div className="mt-1 text-xl font-bold text-slate-800">
+                    {report.roi.baselineRoiPct >= 0 ? '+' : ''}
+                    {report.roi.baselineRoiPct.toLocaleString()}% ROI
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-600">
+                    SGD {report.roi.baselineRevenue.toLocaleString()}/mo ·{' '}
+                    {report.roi.baselineRoas.toFixed(1)}x
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-sans text-slate-500">
+                    {report.roi.baselineMeetings} SQLs · {report.roi.baselineDealsExact.toFixed(1)}{' '}
+                    deals
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-sans text-slate-500">
+                    With SQL Signal Quality
+                  </div>
+                  <div
+                    className={`mt-1 text-xl font-bold ${
+                      report.roi.signalExpiredBlocked ? 'text-rose-700' : 'text-emerald-700'
+                    }`}
+                  >
+                    {report.roi.improvedRoiPct >= 0 ? '+' : ''}
+                    {report.roi.improvedRoiPct.toLocaleString()}% ROI
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-800 font-semibold">
+                    SGD {report.roi.improvedRevenue.toLocaleString()}/mo ·{' '}
+                    {report.roi.improvedRoas.toFixed(1)}x
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-sans text-slate-500">
+                    {report.roi.improvedMeetings} SQLs · {report.roi.improvedDealsExact.toFixed(1)}{' '}
+                    deals
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[11px] font-sans text-slate-500">
+                    Net Financial Uplift
+                  </div>
+                  <div
+                    className={`mt-1 text-xl font-bold ${
+                      report.roi.signalExpiredBlocked ? 'text-rose-700' : 'text-teal-700'
+                    }`}
+                  >
+                    +SGD {report.roi.monthlyRevenueUplift.toLocaleString()}/mo
+                  </div>
+                  <div className="mt-0.5 text-xs text-slate-700 font-semibold">
+                    +SGD {report.roi.annualRevenueUplift.toLocaleString()}/yr
+                  </div>
+                  <div className="mt-0.5 text-[11px] font-sans text-slate-500">
+                    {report.roi.signalExpiredBlocked
+                      ? '0% lift (Closed-Won expired >90d)'
+                      : `+${report.roi.extraMeetingsPerMonth} SQLs · +${report.roi.extraDealsPerMonth.toFixed(1)} deals/mo`}
+                  </div>
+                </div>
+              </div>
+
+              {/* Proportional Visual Revenue Bars */}
+              {(() => {
+                const maxRev = Math.max(adSpend, report.roi.improvedRevenue, 1);
+                const spendPct = Math.max(4, Math.round((adSpend / maxRev) * 100));
+                const basePct = Math.max(6, Math.round((report.roi.baselineRevenue / maxRev) * 100));
+                const impPct = Math.max(6, Math.round((report.roi.improvedRevenue / maxRev) * 100));
+
+                return (
+                  <div className="space-y-3 text-xs">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600">Monthly Google Ad Spend (Same Budget)</span>
+                        <span className="font-mono font-semibold text-slate-700 tabular-nums">
+                          SGD {adSpend.toLocaleString()}
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-slate-500 rounded-full"
+                          style={{ width: `${spendPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-600">
+                          Baseline Revenue (Form-Only · Cost/Deal: SGD{' '}
+                          {report.roi.baselineCostPerDeal.toLocaleString()})
+                        </span>
+                        <span className="font-mono font-semibold text-slate-900 tabular-nums">
+                          SGD {report.roi.baselineRevenue.toLocaleString()} / mo
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-sky-600 rounded-full"
+                          style={{ width: `${basePct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium text-slate-900">
+                          Projected Revenue (SQL Signal +{report.roi.effectiveLiftPct}% · Cost/Deal:
+                          SGD {report.roi.improvedCostPerDeal.toLocaleString()})
+                        </span>
+                        <span
+                          className={`font-mono font-bold tabular-nums ${
+                            report.roi.signalExpiredBlocked ? 'text-rose-700' : 'text-emerald-700'
+                          }`}
+                        >
+                          SGD {report.roi.improvedRevenue.toLocaleString()} / mo
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full bg-slate-200/80 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full ${
+                            report.roi.signalExpiredBlocked ? 'bg-rose-500' : 'bg-emerald-600'
+                          }`}
+                          style={{ width: `${impPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Footer Verdict / Action Row */}
+              <div className="pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+                {report.roi.signalExpiredBlocked ? (
+                  <span className="text-rose-700 font-medium">
+                    Waiting {salesCycleDays} days for Closed-Won misses Google&apos;s 90-day cutoff (0% lift). Switch to{' '}
+                    <button
+                      type="button"
+                      onClick={() => handleSelectGoal('meeting_held')}
+                      className="underline font-bold"
+                    >
+                      SQL · Meeting Held
+                    </button>{' '}
+                    to unlock +{signalLiftPct}% signal quality lift.
+                  </span>
+                ) : (
+                  <span className="text-slate-600">
+                    Same SGD {adSpend.toLocaleString()}/mo budget delivers{' '}
+                    <strong className="text-slate-900 font-mono">
+                      +{report.roi.roiGainPts.toLocaleString()}% ROI points
+                    </strong>{' '}
+                    and lowers Cost per Deal from{' '}
+                    <span className="font-mono">
+                      SGD {report.roi.baselineCostPerDeal.toLocaleString()}
+                    </span>{' '}
+                    to{' '}
+                    <strong className="font-mono text-emerald-700">
+                      SGD {report.roi.improvedCostPerDeal.toLocaleString()}
+                    </strong>
+                    .
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    onAskAssistant(
+                      `Summarize this ROI business case for leadership: on SGD ${adSpend}/mo ad spend with ${meetingBookedRatePct}% Inquiry-to-Meeting, ${meetingShowRatePct}% Meeting Show-to-SQL, and ${sqlWinRatePct}% SQL-to-Win rate (avg deal SGD ${avgDealValue}), a +${signalLiftPct}% SQL signal quality lift grows monthly revenue from SGD ${report.roi.baselineRevenue.toLocaleString()} (${report.roi.baselineRoiPct}% ROI) to SGD ${report.roi.improvedRevenue.toLocaleString()} (${report.roi.improvedRoiPct}% ROI), adding +SGD ${report.roi.annualRevenueUplift.toLocaleString()}/year.`
+                    )
+                  }
+                  className="inline-flex items-center gap-1.5 font-semibold text-teal-700 hover:text-teal-800 whitespace-nowrap"
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Ask AI for ROI Executive Brief</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
-      {/* SECTION 2: INTERACTIVE PLAYABLE FLOWCHART */}
+      {/* SECTION 2: TYPICAL GOOGLE ADS CAMPAIGN DURATION VS EARLY QUALITY SIGNAL */}
+      <section
+        id="campaign-timeline"
+        className="bg-white border border-slate-200 rounded-xl overflow-hidden scroll-mt-20"
+      >
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-slate-900">
+              How Long a Google Paid Campaign Runs vs. When You Send Quality Signals
+            </h2>
+            <p className="text-xs text-slate-500">
+              Typical Google Ads campaigns run 3–6+ months (with a 7–14 day learning phase and a 90-day evaluation window). If you don&apos;t send a quality SQL signal early, Google optimizes for cheap form fills and you lose out on quality leads.
+            </p>
+          </div>
+          <span
+            className={`text-xs font-mono font-semibold tabular-nums ${
+              report.active.avgDays <= 14
+                ? 'text-emerald-700'
+                : report.active.avgDays <= 63
+                  ? 'text-sky-700'
+                  : 'text-rose-700'
+            }`}
+          >
+            Your Selected Signal: Day {report.active.avgDays} ({report.active.shortLabel})
+          </span>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Horizontal Campaign Runway Bar (Day 0 to Day 180 / 6 Months) */}
+          {(() => {
+            const dayToPct = (d: number) => {
+              const clamped = Math.min(180, Math.max(0, d));
+              if (clamped <= 14) return (clamped / 14) * 16; // 0% -> 16%
+              if (clamped <= 30) return 16 + ((clamped - 14) / 16) * 14; // 16% -> 30%
+              if (clamped <= 90) return 30 + ((clamped - 30) / 60) * 38; // 30% -> 68%
+              return 68 + ((clamped - 90) / 90) * 32; // 68% -> 100%
+            };
+
+            const signalLeft = dayToPct(report.active.avgDays);
+            const eclLeft = dayToPct(63);
+            const gclidLeft = dayToPct(90);
+            const isEarly = report.active.avgDays <= 24;
+            const isLate = report.active.avgDays > 63;
+
+            return (
+              <div className="relative pt-9 pb-7">
+                {/* Live Selected Signal Marker */}
+                <div
+                  className="absolute top-0 -translate-x-1/2 flex flex-col items-center z-10 pointer-events-none"
+                  style={{ left: `${Math.min(91, Math.max(9, signalLeft))}%` }}
+                >
+                  <span
+                    className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold whitespace-nowrap ${
+                      isLate
+                        ? 'bg-rose-600 text-white'
+                        : isEarly
+                          ? 'bg-emerald-600 text-white'
+                          : 'bg-sky-600 text-white'
+                    }`}
+                  >
+                    {report.active.shortLabel} · Day {report.active.avgDays}
+                  </span>
+                  <div
+                    className={`w-0.5 h-3.5 ${
+                      isLate ? 'bg-rose-600' : isEarly ? 'bg-emerald-600' : 'bg-sky-600'
+                    }`}
+                  />
+                </div>
+
+                {/* Segmented 6-Month Campaign Runway */}
+                <div className="relative h-10 rounded-lg overflow-hidden flex border border-slate-200 text-[11px] font-medium">
+                  <div
+                    className="bg-emerald-600 text-white flex items-center justify-center px-2 border-r border-white/25 whitespace-nowrap overflow-hidden"
+                    style={{ width: '16%' }}
+                  >
+                    Wk 1–2 · Learning
+                  </div>
+                  <div
+                    className="bg-teal-600 text-white flex items-center justify-center px-2 border-r border-white/25 whitespace-nowrap overflow-hidden"
+                    style={{ width: '14%' }}
+                  >
+                    Mo 1 · Setup
+                  </div>
+                  <div
+                    className="bg-sky-700 text-white flex items-center justify-center px-2 border-r border-white/25 whitespace-nowrap overflow-hidden"
+                    style={{ width: '38%' }}
+                  >
+                    Months 2–3 · Core Paid Campaign (Min. 90d)
+                  </div>
+                  <div
+                    className="bg-slate-200 text-slate-700 flex items-center justify-center px-2 whitespace-nowrap overflow-hidden"
+                    style={{ width: '32%' }}
+                  >
+                    Months 4–6+ · Scale (Past 90d Cutoff)
+                  </div>
+
+                  {/* Exact Day 63 ECL vertical guide */}
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-rose-300 pointer-events-none"
+                    style={{ left: `${eclLeft}%` }}
+                  />
+                  {/* Exact Day 90 GCLID vertical guide */}
+                  <div
+                    className="absolute top-0 bottom-0 w-0.5 bg-rose-500 pointer-events-none"
+                    style={{ left: `${gclidLeft}%` }}
+                  />
+                </div>
+
+                {/* Aligned Scale Ticks */}
+                <div className="relative mt-2 h-4 text-[11px] font-mono text-slate-500 tabular-nums">
+                  <span className="absolute left-0">Day 0</span>
+                  <span
+                    className="absolute -translate-x-1/2 text-emerald-700 font-semibold hidden sm:inline"
+                    style={{ left: '16%' }}
+                  >
+                    Day 14
+                  </span>
+                  <span
+                    className="absolute -translate-x-1/2 hidden sm:inline"
+                    style={{ left: '30%' }}
+                  >
+                    Day 30
+                  </span>
+                  <span
+                    className="absolute -translate-x-1/2 text-rose-700 font-semibold whitespace-nowrap"
+                    style={{ left: `${eclLeft}%` }}
+                  >
+                    Day 63 · ECL
+                  </span>
+                  <span
+                    className="absolute -translate-x-1/2 text-rose-700 font-semibold whitespace-nowrap"
+                    style={{ left: `${gclidLeft}%` }}
+                  >
+                    Day 90 · GCLID
+                  </span>
+                  <span className="absolute right-0">Day 180 (6 mo)</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* 3-Column Plain-English Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-4 border-t border-slate-200 text-xs">
+            <div className="space-y-1">
+              <div className="font-mono text-[11px] font-semibold text-emerald-700">
+                Weeks 1–2 (Days 1–14)
+              </div>
+              <div className="font-bold text-slate-900">Smart Bidding Learning Window</div>
+              <p className="text-slate-600 leading-relaxed">
+                Google&apos;s official learning status runs 7 days and takes 1–3 conversion cycles to stabilize. Sending <strong>SQL Meeting Booked / Held</strong> in Days 6–14 feeds quality signals immediately while the algorithm is deciding who to target.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="font-mono text-[11px] font-semibold text-sky-700">
+                Months 1–3 (Days 15–90)
+              </div>
+              <div className="font-bold text-slate-900">Typical Paid Campaign Evaluation</div>
+              <p className="text-slate-600 leading-relaxed">
+                Most Google paid search campaigns run at least <strong>3 months</strong> (6–12 months to fully scale). Without early quality signals, Google spends all of Months 1–3 chasing cheap clickers and low-intent form fills instead of real buyers.
+              </p>
+            </div>
+
+            <div className="space-y-1">
+              <div className="font-mono text-[11px] font-semibold text-rose-700">
+                Months 3–6+ (Past Day 63 / Day 90)
+              </div>
+              <div className="font-bold text-slate-900">Why Waiting for Final Sales Fails</div>
+              <p className="text-slate-600 leading-relaxed">
+                If you wait 3–5 months for Closed-Won deals, both <strong>ECL (63d)</strong> and <strong>GCLID (90d)</strong> expire before the first signal arrives—your campaign misses out on quality leads for its entire run.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 3: INTERACTIVE PLAYABLE FLOWCHART */}
       <section
         id="flowchart"
         ref={flowchartRef}
